@@ -166,12 +166,14 @@
     const wasInFlow = inOrderFlow;
     inOrderFlow = nowInFlow;
 
-    if (inOrderFlow) {
-      flowWarningEl.style.display = "block";
-      window.onbeforeunload = () => "Your food order is in progress.";
-    } else {
-      flowWarningEl.style.display = "none";
-      window.onbeforeunload = null;
+    if (flowWarningEl) {
+      if (inOrderFlow) {
+        flowWarningEl.style.display = "block";
+        window.onbeforeunload = () => "Your food order is in progress.";
+      } else {
+        flowWarningEl.style.display = "none";
+        window.onbeforeunload = null;
+      }
     }
 
     if (wasInFlow && !inOrderFlow && replyText) {
@@ -187,7 +189,7 @@
   }
 
   // ============================================================
-  // RECORDING (FULLY PATCHED FOR MOBILE)
+  // RECORDING (patched for mobile)
   // ============================================================
 
   async function startRecording() {
@@ -235,13 +237,32 @@
 
           console.log("[DEBUG] Server status:", res.status);
 
+          // Non-2xx status from server
           if (!res.ok) {
-            console.error("[SERVER ERROR]", await res.text());
+            const errorText = await res.text();
+            console.error("[SERVER ERROR]", res.status, errorText);
             setStatus("Server error", "va-dot-error");
             return;
           }
 
-          const data = await res.json();
+          // Clone so we can inspect text if JSON parsing fails
+          const resClone = res.clone();
+          let data;
+
+          try {
+            data = await res.json();
+          } catch (jsonErr) {
+            const rawText = await resClone.text();
+            console.error(
+              "[PARSE ERROR] Could not parse JSON:",
+              jsonErr,
+              "Raw response:",
+              rawText
+            );
+            setStatus("Bad response", "va-dot-error");
+            return;
+          }
+
           console.log("[MatrixVA] /api/voice:", data);
 
           appendChat("user", data.user_text);
@@ -266,11 +287,14 @@
             } else {
               showPlayReplyButton(src, data.audio_mime);
             }
+          } else {
+            console.warn("[TTS] No audio returned.");
           }
 
           setStatus("Ready", "va-dot-idle");
         } catch (err) {
-          console.error("Fetch error:", err);
+          // Real network-level error (request failed, offline, etc.)
+          console.error("[NETWORK ERROR] fetch failed:", err);
           setStatus("Network error", "va-dot-error");
         }
       };
@@ -290,7 +314,9 @@
 
   function stopRecording() {
     try {
-      mediaRecorder.stop();
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      }
     } catch (e) {
       console.error("Stop error:", e);
     }
