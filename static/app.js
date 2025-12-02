@@ -6,10 +6,17 @@
 // - Clears chat after order done/cancel
 // - Shows toast: "Order complete. Starting fresh." / "Order cancelled. Starting fresh."
 // - Hidden audio playback (no visible player)
+// - Mobile: "Tap to hear reply" button instead of forced autoplay
 // ============================================================
 
 (() => {
   console.log("[MatrixVA] app.js loaded");
+
+  // ---------- Device type ----------
+  const IS_MOBILE =
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
 
   // ---------- Global TTS audio element (mobile fix) ----------
   const ttsAudio = new Audio();
@@ -141,6 +148,35 @@
     }, 3000);
   }
 
+  // ---------- "Tap to hear reply" button (mobile) ----------
+  function showPlayReplyButton() {
+    // Remove any existing button
+    const existing = document.getElementById("playReplyBtn");
+    if (existing && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
+
+    const btn = document.createElement("button");
+    btn.id = "playReplyBtn";
+    btn.textContent = "Tap to hear reply";
+    btn.className = "va-play-reply-btn"; // add styles in CSS if you want
+
+    btn.addEventListener("click", () => {
+      ttsAudio
+        .play()
+        .then(() => {
+          console.log("[TTS] Playback OK (mobile tap)");
+          if (btn.parentNode) btn.parentNode.removeChild(btn);
+        })
+        .catch((err) => {
+          console.error("[TTS] Playback failed (mobile tap):", err);
+        });
+    });
+
+    chat.appendChild(btn);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
   // ---------- Flow guard logic ----------
   function updateFlowGuard(debug, replyText) {
     const flow = debug && debug.flow;
@@ -229,10 +265,18 @@
             const src = `data:${data.audio_mime};base64,${data.audio_base64}`;
             ttsAudio.src = src;
 
-            ttsAudio
-              .play()
-              .then(() => console.log("[TTS] Playback OK"))
-              .catch((err) => console.error("[TTS] Playback failed:", err));
+            if (!IS_MOBILE) {
+              // Desktop: try to auto-play
+              ttsAudio
+                .play()
+                .then(() => console.log("[TTS] Playback OK (desktop)"))
+                .catch((err) =>
+                  console.error("[TTS] Playback failed (desktop):", err)
+                );
+            } else {
+              // Mobile: show a tap-to-play button
+              showPlayReplyButton();
+            }
           } else {
             console.warn("[TTS] No audio returned.");
           }
