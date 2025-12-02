@@ -6,7 +6,7 @@
 // - Clears chat after order done/cancel
 // - Shows toast: "Order complete. Starting fresh." / "Order cancelled. Starting fresh."
 // - Hidden audio playback (no visible player)
-// - Mobile: "Tap to hear reply" button instead of forced autoplay
+// - Mobile: visible audio player + "Tap to hear reply"
 // ============================================================
 
 (() => {
@@ -18,7 +18,7 @@
       navigator.userAgent
     );
 
-  // ---------- Global TTS audio element (mobile fix) ----------
+  // ---------- Global TTS audio element (desktop / generic use) ----------
   const ttsAudio = new Audio();
   let audioUnlocked = false;
 
@@ -149,20 +149,35 @@
   }
 
   // ---------- "Tap to hear reply" button (mobile) ----------
-  function showPlayReplyButton() {
-    // Remove any existing button
-    const existing = document.getElementById("playReplyBtn");
-    if (existing && existing.parentNode) {
-      existing.parentNode.removeChild(existing);
+  function showPlayReplyButton(src, mime) {
+    // Remove any existing button or player
+    const existingBtn = document.getElementById("playReplyBtn");
+    if (existingBtn && existingBtn.parentNode) {
+      existingBtn.parentNode.removeChild(existingBtn);
     }
+    const existingAudio = document.getElementById("replyAudioPlayer");
+    if (existingAudio && existingAudio.parentNode) {
+      existingAudio.parentNode.removeChild(existingAudio);
+    }
+
+    // Visible audio element so the OS media UI is used
+    const audioEl = document.createElement("audio");
+    audioEl.id = "replyAudioPlayer";
+    audioEl.controls = true; // show native controls on mobile
+    audioEl.src = src;
+
+    // Log any decoding/playback errors
+    audioEl.addEventListener("error", () => {
+      console.error("[TTS] <audio> error (mobile):", audioEl.error);
+    });
 
     const btn = document.createElement("button");
     btn.id = "playReplyBtn";
     btn.textContent = "Tap to hear reply";
-    btn.className = "va-play-reply-btn"; // add styles in CSS if you want
+    btn.className = "va-play-reply-btn";
 
     btn.addEventListener("click", () => {
-      ttsAudio
+      audioEl
         .play()
         .then(() => {
           console.log("[TTS] Playback OK (mobile tap)");
@@ -173,6 +188,8 @@
         });
     });
 
+    // Append both to the chat area
+    chat.appendChild(audioEl);
     chat.appendChild(btn);
     chat.scrollTop = chat.scrollHeight;
   }
@@ -260,10 +277,14 @@
           // Update flow guard + detect end-of-flow
           updateFlowGuard(data.debug, data.reply_text);
 
-          // Hidden audio playback (no visible player)
+          // TTS playback handling
           if (data.audio_base64 && data.audio_mime) {
             const src = `data:${data.audio_mime};base64,${data.audio_base64}`;
+            console.log("[TTS] Got audio with MIME:", data.audio_mime);
+
+            // Prepare generic ttsAudio
             ttsAudio.src = src;
+            ttsAudio.load();
 
             if (!IS_MOBILE) {
               // Desktop: try to auto-play
@@ -274,8 +295,8 @@
                   console.error("[TTS] Playback failed (desktop):", err)
                 );
             } else {
-              // Mobile: show a tap-to-play button
-              showPlayReplyButton();
+              // Mobile: show a tap-to-play button with visible audio element
+              showPlayReplyButton(src, data.audio_mime);
             }
           } else {
             console.warn("[TTS] No audio returned.");
