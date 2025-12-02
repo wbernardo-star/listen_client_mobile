@@ -217,3 +217,12 @@ html, body {
 .va-chat::-webkit-scrollbar-thumb:hover {
   background: #666;
 }
+.va-play-reply-btn {
+  margin-top: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
